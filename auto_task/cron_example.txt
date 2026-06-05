@@ -1,0 +1,5 @@
+# Compute-node cron example for periodic Codex agent monitoring.
+# Runs every 12 hours, activates the conda environment, and uses
+# the default codex exec behavior in run_codex_monitor.sh.
+
+0 */12 * * * cd /path/to/your/project && /usr/bin/bash -lc 'source ~/.bashrc && conda activate <your_env> && bash auto_task/run_codex_monitor.sh' >> /path/to/your/project/cron.log 2>&1

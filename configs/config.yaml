@@ -1,0 +1,22 @@
+# Default project configuration
+seed: 42
+base_dir: "./exp"
+run_name: "pipeline_run"
+
+# Model selection for API
+model: "gpt-4o-mini"
+embedding_model: "text-embedding-3-small"
+
+# Local LLM offline configuration (vLLM)
+LocalLLM:
+  model: "Qwen/Qwen3-0.6B"
+  parameters:
+    tensor_parallel_size: 1      # Number of GPUs to partition the model across
+    gpu_memory_utilization: 0.9  # Fraction of GPU memory to reserve
+
+# Data Loader parameters
+DataLoader:
+  parameters:
+    batch_size: 32
+    shuffle: true
+    max_samples: 100

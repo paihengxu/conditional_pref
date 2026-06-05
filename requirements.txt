@@ -1,0 +1,13 @@
+python-dotenv
+omegaconf
+openai
+tiktoken
+numpy
+tqdm
+
+# Optional / Heavy Dependencies (Uncomment if needed for local LLM or data analysis)
+# torch
+# vllm
+# pandas
+# scipy
+# scikit-learn

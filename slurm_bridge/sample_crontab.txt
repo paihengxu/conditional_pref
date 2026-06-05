@@ -1,0 +1,5 @@
+# Login-node cron example for processing queued bridge requests.
+# This matches the 12-hour coding session cadence and runs 15 minutes after
+# the agent starts at 00:00 and 12:00.
+
+15 0,12 * * * cd /path/to/your/project && /usr/bin/bash -lc 'source ~/.bashrc && conda activate <your_env> && python slurm_bridge/login_worker.py --once' >> /path/to/your/project/slurm_bridge/logs/cron.log 2>&1

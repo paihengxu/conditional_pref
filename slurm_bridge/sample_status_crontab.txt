@@ -1,0 +1,6 @@
+# Login-node cron example for a Slurm status snapshot read by the coding agent.
+# This matches auto_task/cron_example.txt, which runs the coding session at
+# 00:00 and 12:00 every day, so the snapshot runs 10 minutes earlier at
+# 23:50 and 11:50.
+
+50 11,23 * * * cd /path/to/your/project && /usr/bin/bash -lc 'source ~/.bashrc && conda activate <your_env> && python slurm_bridge/status_snapshot.py --user <your_username> --output slurm_bridge/status/latest.json' >> /path/to/your/project/slurm_bridge/logs/status_snapshot.log 2>&1
