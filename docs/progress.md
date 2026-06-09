@@ -1,6 +1,6 @@
 # Conditional Preference Discovery Progress
 
-Last updated: 2026-06-08.
+Last updated: 2026-06-09.
 
 This file is the main standalone context file for continuing the project. Keep it concise and update it as decisions change. Put bulky inventories or detailed notes in separate docs and link them here.
 
@@ -88,7 +88,9 @@ Exact reproduction results:
 - PRISM: `21/32` features kept, mean fidelity `0.376`, full-SAE val AUC `0.671`. This is close to the paper's `23` high-fidelity PRISM features and recovers themes including detailed neutral answers, avoiding AI disclaimers, substantive controversial-topic engagement, dispreference for "yes"-only answers, and off-topic/tangential content.
 - Approximate API cost for exact CommunityAlign + PRISM reproduction: `$40`.
 
-Do not use GPT-5-mini for every exploratory run by default. Use it for trusted baselines and final validation of selected conditional findings. For broad sweeps, first use cached exact global features plus cheap/statistical context analyses, and evaluate better open-weight annotators before scaling annotation-heavy workflows. The first local annotator tried, `Qwen/Qwen3-30B-A3B-Instruct-2507`, was acceptable for PRISM but weak for CommunityAlign fidelity retention (`13/32` kept vs. `31/32` with GPT-5-mini), so it should not be the default final judge without further calibration. Next calibration target: `Qwen/Qwen3.5-27B` as the local annotator on 2x A6000.
+Do not use GPT-5-mini for every exploratory run by default. Use it for trusted baselines and final validation of selected conditional findings. For broad sweeps, first use cached exact global features plus cheap/statistical context analyses, and evaluate better open-weight annotators before scaling annotation-heavy workflows.
+
+Local annotator calibration summary: `Qwen/Qwen3-30B-A3B-Instruct-2507` was close on some downstream AUCs but poor at reproducing high-fidelity feature retention (`13/32` kept on CommunityAlign and `8/32` on PRISM). `Qwen/Qwen3.5-27B` is much closer for feature-table reproduction (`31/32` kept on CommunityAlign and `22/32` on PRISM), though PRISM full-SAE val AUC remains below exact/paper (`0.665` vs. `0.671`). Detailed table and paper references: `docs/wimhf_local_calibration.md`.
 
 Model selection should live in the JSON configs. `scripts/run_wimhf.py` should not rewrite the configured interpreter, annotator, or abbreviator model. Current local configs set `annotator_model` to `Qwen/Qwen3.5-27B`; exact configs set `annotator_model` and `abbreviator_model` to `gpt-5-mini`. The runner takes one required config path with `--config`; sbatch files should pass the exact config path directly rather than using dataset/profile shortcuts.
 
@@ -115,10 +117,10 @@ Likely relevant methods: interaction/covariate LASSO, demeaned/reweighted LASSO,
 2. Verify import/config load for CommunityAlign and PRISM configs. Codex: Done with previous env; rerun with `conda run -n condpref` after migration if needed. Both cached dataset paths exist.
 3. Create local-annotator config variants for CommunityAlign and PRISM using `Qwen/Qwen3-30B-A3B-Instruct-2507` as `annotator_model`. Done; this model was calibrated and found weak on CommunityAlign.
 4. Run full local-annotator WIMHF reproduction for CommunityAlign and PRISM. Codex: runner and sbatch wrapper written; not submitted. [Human: submitted]
-5. Compare feature tables, fidelity metrics, and predictive metrics. Codex: Done; PRISM matches reasonably, CommunityAlign needs GPT-5-mini verification.
+5. Compare feature tables, fidelity metrics, and predictive metrics. Codex: Done; see `docs/wimhf_local_calibration.md`.
 6. Run GPT-5-mini annotator reproduction for CommunityAlign and PRISM, prioritizing CommunityAlign. Human: Done; outputs in `outputs/reproduction/wimhf_exact`; use as trusted baseline.
 7. Build context inventories and support tables for CommunityAlign and PRISM.
-8. Calibrate `Qwen/Qwen3.5-27B` as a stronger open-weight/local annotator against the GPT-5-mini feature-retention and top-feature results before using local annotation for large conditional sweeps. Codex: local/exact config profiles and 2x A6000 sbatch wrappers updated; not submitted.
+8. Calibrate `Qwen/Qwen3.5-27B` as a stronger open-weight/local annotator against the GPT-5-mini feature-retention and top-feature results before using local annotation for large conditional sweeps. Codex: Done for CommunityAlign and PRISM; Qwen3.5 is the better local default for feature retention, with GPT-5-mini reserved for final validation.
 9. Decide the first conditional extension dataset and method.
 
 ## Open Questions
