@@ -18,8 +18,6 @@ WIMHF_REPO = PROJECT_DIR / "repos" / "wimhf"
 if str(WIMHF_REPO) not in sys.path:
     sys.path.insert(0, str(WIMHF_REPO))
 
-from wimhf.quickstart import load_config, run_wimhf_pipeline  # noqa: E402
-
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -42,6 +40,15 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=None,
         help="Directory for generated configs, logs, and results.",
+    )
+    parser.add_argument(
+        "--continue-from",
+        type=Path,
+        default=None,
+        help=(
+            "Existing run root to continue from. Reuses that run's generated "
+            "cache/checkpoint directories instead of creating a fresh timestamped run."
+        ),
     )
     parser.add_argument(
         "--smoke-rows",
@@ -114,13 +121,15 @@ def make_run_config(
     mode: str,
     run_root: Path,
     smoke_rows: int,
+    continue_from_existing: bool = False,
 ) -> tuple[Path, str]:
     cfg = read_base_config(config_path)
     dataset = dataset_slug(cfg["dataset"]["name"])
 
+    cfg.setdefault("runtime", {})
     cfg["runtime"]["checkpoint_dir"] = str(run_root / dataset / "checkpoints")
     cfg["runtime"]["cache_dir"] = str(run_root / dataset / "cache")
-    cfg["runtime"]["retrain_sae"] = True
+    cfg["runtime"]["retrain_sae"] = not continue_from_existing
 
     if mode == "smoke":
         write_smoke_sample(cfg, dataset, run_root, smoke_rows)
@@ -179,16 +188,20 @@ def run_dataset(
     mode: str,
     run_root: Path,
     smoke_rows: int,
+    continue_from_existing: bool = False,
 ) -> None:
     config_path, dataset = make_run_config(
         config_path=input_config_path,
         mode=mode,
         run_root=run_root,
         smoke_rows=smoke_rows,
+        continue_from_existing=continue_from_existing,
     )
     output_dir = run_root / dataset / "results"
 
     print(f"Starting {dataset}: {config_path}", flush=True)
+    from wimhf.quickstart import load_config, run_wimhf_pipeline
+
     cfg = load_config(str(config_path))
     print(
         "Effective models for "
@@ -206,24 +219,41 @@ def main() -> None:
     args = parse_args()
     ensure_openai_key()
 
+    if args.run_root is not None and args.continue_from is not None:
+        raise ValueError("--run-root and --continue-from cannot be used together.")
+
     config_path = args.config
     if not config_path.is_absolute():
         config_path = PROJECT_DIR / config_path
     if not config_path.exists():
         raise FileNotFoundError(f"WIMHF config not found: {config_path}")
 
-    run_root = args.run_root or default_run_root(args.mode, config_path)
-    run_root.mkdir(parents=True, exist_ok=True)
+    continue_from_existing = args.continue_from is not None
+    if args.continue_from is not None:
+        run_root = args.continue_from
+        if not run_root.is_absolute():
+            run_root = PROJECT_DIR / run_root
+        if not run_root.exists():
+            raise FileNotFoundError(f"Cannot continue from missing run root: {run_root}")
+        if not run_root.is_dir():
+            raise NotADirectoryError(f"Continue-from path is not a directory: {run_root}")
+    else:
+        run_root = args.run_root or default_run_root(args.mode, config_path)
+        if not run_root.is_absolute():
+            run_root = PROJECT_DIR / run_root
+        run_root.mkdir(parents=True, exist_ok=True)
 
     print(f"Run root: {run_root}", flush=True)
     print(f"Mode: {args.mode}", flush=True)
     print(f"Input config: {config_path}", flush=True)
+    print(f"Continue from existing: {continue_from_existing}", flush=True)
 
     run_dataset(
         input_config_path=config_path,
         mode=args.mode,
         run_root=run_root,
         smoke_rows=args.smoke_rows,
+        continue_from_existing=continue_from_existing,
     )
 
     print(f"WIMHF run completed under {run_root}", flush=True)

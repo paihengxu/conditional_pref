@@ -16,6 +16,7 @@ if [[ -f .env ]]; then
   source .env
   set +a
 fi
+module load cuda/13.0.2
 conda activate condpref
 
 export PYTHONUNBUFFERED=1

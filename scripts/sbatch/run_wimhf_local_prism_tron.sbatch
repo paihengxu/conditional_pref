@@ -7,7 +7,7 @@
 #SBATCH --mem=64GB
 #SBATCH --account=clip
 #SBATCH --partition=clip
-#SBATCH --output=outputs/reproduction/wimhf_local/wimhf_local_full_prism_qwen35_27b_s42_clip_20260609_%j.log
+#SBATCH --output=outputs/reproduction/wimhf_local/wimhf_local_full_prism_qwen35_27b_s42_clip_20260609_6986752/%j.log
 
 source /nfshomes/paiheng/.bashrc
 cd /fs/clip-projects/clip-k12/paiheng/conditional_pref
@@ -16,6 +16,7 @@ if [[ -f .env ]]; then
   source .env
   set +a
 fi
+module load cuda/13.0.2
 conda activate condpref
 
 export PYTHONUNBUFFERED=1
@@ -31,6 +32,6 @@ fi
 python scripts/run_wimhf.py \
   --config configs/prism_wimhf_local.json \
   --mode full \
-  --run-root "outputs/reproduction/wimhf_local/wimhf_local_full_prism_qwen35_27b_s42_clip_20260609_${SLURM_JOB_ID:-manual}"
+  --continue-from "outputs/reproduction/wimhf_local/wimhf_local_full_prism_qwen35_27b_s42_clip_20260609_6986752"
 
 conda deactivate
