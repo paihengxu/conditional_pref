@@ -4,10 +4,23 @@ openai
 tiktoken
 numpy
 tqdm
+pandas
+scipy
+scikit-learn
+statsmodels
+networkx
+skglm
+datasets
+huggingface-hub
+sentence-transformers
+accelerate
 
-# Optional / Heavy Dependencies (Uncomment if needed for local LLM or data analysis)
-# torch
-# vllm
-# pandas
-# scipy
-# scikit-learn
+# Local Qwen3.5 / WIMHF annotation stack.
+# vLLM's resolver should choose the compatible torch build for the platform.
+vllm==0.22.1
+transformers>=5.2.0,!=5.10.0
+
+# Reward-modeling utilities used by repos/wimhf/wimhf/reward_modeling.py.
+peft
+trl
+bitsandbytes

@@ -58,25 +58,25 @@ Backup/secondary candidates:
 
 ## Environment Decision
 
-Use existing conda env `textdiff` for initial reproduction.
+Use conda env `condpref` for project runs.
 
 Known state:
 
 - Python 3.10.18.
 - Has `torch`, `vllm`, `skglm`, `datasets`, `hypothesaes`, `openai`, `pandas`, `scipy`.
 - Does not appear to have `flash_attn`; this should not block OpenAI-API WIMHF reproduction.
-- `conda activate textdiff` is not initialized in noninteractive Codex shells; use `conda run -n textdiff ...`.
+- `conda activate condpref` may not be initialized in noninteractive Codex shells; use `conda run -n condpref ...`.
 
 Setup:
 
 ```bash
-conda activate textdiff
+conda activate condpref
 cd /fs/clip-projects/clip-k12/paiheng/conditional_pref
 pip install -e repos/wimhf --no-deps
 export OAI_WIMHF="$OPENAI_API_KEY"
 ```
 
-Use `--no-deps` initially to avoid disturbing the working Torch/vLLM stack. Create a separate env later only if results look promising and post-training experiments require it.
+Use `--no-deps` initially to avoid disturbing the working Torch/vLLM stack.
 
 ## WIMHF Reproduction Decision
 
@@ -111,8 +111,8 @@ Likely relevant methods: interaction/covariate LASSO, demeaned/reweighted LASSO,
 
 ## Next Execution Steps
 
-1. Install WIMHF editable in `textdiff` with `--no-deps`. Human: Done. 
-2. Verify import/config load for CommunityAlign and PRISM configs. Codex: Done with `conda run -n textdiff`; both cached dataset paths exist.
+1. Install WIMHF editable in `condpref` with `--no-deps`. Human: Done. 
+2. Verify import/config load for CommunityAlign and PRISM configs. Codex: Done with previous env; rerun with `conda run -n condpref` after migration if needed. Both cached dataset paths exist.
 3. Create local-annotator config variants for CommunityAlign and PRISM using `Qwen/Qwen3-30B-A3B-Instruct-2507` as `annotator_model`. Done; this model was calibrated and found weak on CommunityAlign.
 4. Run full local-annotator WIMHF reproduction for CommunityAlign and PRISM. Codex: runner and sbatch wrapper written; not submitted. [Human: submitted]
 5. Compare feature tables, fidelity metrics, and predictive metrics. Codex: Done; PRISM matches reasonably, CommunityAlign needs GPT-5-mini verification.

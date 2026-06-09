@@ -16,7 +16,7 @@ if [[ -f .env ]]; then
   source .env
   set +a
 fi
-conda activate textdiff
+conda activate condpref
 
 export PYTHONUNBUFFERED=1
 
