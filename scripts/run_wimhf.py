@@ -58,6 +58,14 @@ def parse_args() -> argparse.Namespace:
         help="Local vLLM model used for annotation/scoring.",
     )
     parser.add_argument(
+        "--annotator-model",
+        default=os.environ.get("ANNOTATOR_MODEL"),
+        help=(
+            "Model used for annotation/scoring. Defaults to --local-model for "
+            "backward-compatible local reproduction runs."
+        ),
+    )
+    parser.add_argument(
         "--local-interpreter",
         action="store_true",
         default=os.environ.get("LOCAL_INTERPRETER", "0") == "1",
@@ -118,6 +126,7 @@ def make_run_config(
     mode: str,
     run_root: Path,
     local_model: str,
+    annotator_model: str,
     local_interpreter: bool,
     smoke_rows: int,
 ) -> Path:
@@ -126,7 +135,7 @@ def make_run_config(
     if local_interpreter:
         cfg["interpretation"]["interpreter_model"] = local_model
         cfg["interpretation"]["completion_kwargs"] = {}
-    cfg["interpretation"]["annotator_model"] = local_model
+    cfg["interpretation"]["annotator_model"] = annotator_model
     cfg["interpretation"]["abbreviator_model"] = "gpt-5-mini"
     cfg["runtime"]["checkpoint_dir"] = str(run_root / dataset / "checkpoints")
     cfg["runtime"]["cache_dir"] = str(run_root / dataset / "cache")
@@ -189,6 +198,7 @@ def run_dataset(
     mode: str,
     run_root: Path,
     local_model: str,
+    annotator_model: str,
     local_interpreter: bool,
     smoke_rows: int,
 ) -> None:
@@ -197,6 +207,7 @@ def run_dataset(
         mode=mode,
         run_root=run_root,
         local_model=local_model,
+        annotator_model=annotator_model,
         local_interpreter=local_interpreter,
         smoke_rows=smoke_rows,
     )
@@ -212,6 +223,7 @@ def run_dataset(
 def main() -> None:
     args = parse_args()
     ensure_openai_key()
+    annotator_model = args.annotator_model or args.local_model
 
     run_root = args.run_root or default_run_root(args.mode, args.datasets)
     run_root.mkdir(parents=True, exist_ok=True)
@@ -219,6 +231,7 @@ def main() -> None:
     print(f"Run root: {run_root}", flush=True)
     print(f"Mode: {args.mode}", flush=True)
     print(f"Local model: {args.local_model}", flush=True)
+    print(f"Annotator model: {annotator_model}", flush=True)
     print(f"Local interpreter: {int(args.local_interpreter)}", flush=True)
     print(f"Datasets: {' '.join(args.datasets)}", flush=True)
 
@@ -228,6 +241,7 @@ def main() -> None:
             mode=args.mode,
             run_root=run_root,
             local_model=args.local_model,
+            annotator_model=annotator_model,
             local_interpreter=args.local_interpreter,
             smoke_rows=args.smoke_rows,
         )
