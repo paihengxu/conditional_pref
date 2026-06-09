@@ -51,7 +51,8 @@ Backup/secondary candidates:
 - HypotheSAEs reference repo: `../text_diff/repos/HypotheSAEs`.
 - Cached WIMHF-style data: `data/wimhf/raw/*.json`.
 - Local configs: `configs/community_align_wimhf_local.json`, `configs/prism_wimhf_local.json`, `configs/hh_rlhf_wimhf_local.json`.
-- CommunityAlign and PRISM local configs use `text-embedding-3-small`, SAE `M=32`, `K=4`, prefixes `[8, 32]`, and `length_delta` control.
+- Exact configs: `configs/community_align_wimhf_exact.json`, `configs/prism_wimhf_exact.json`, `configs/hh_rlhf_wimhf_exact.json`.
+- CommunityAlign and PRISM WIMHF configs use `text-embedding-3-small`, SAE `M=32`, `K=4`, prefixes `[8, 32]`, and `length_delta` control.
 - `repos/wimhf` is a nested git repo; local WIMHF patches are tracked there, not by the outer project repo.
 - WIMHF runner: `scripts/run_wimhf.py`; Slurm wrappers following `docs/slurm.md`: `scripts/sbatch/run_wimhf_local_community_align_clip.sbatch`, `scripts/sbatch/run_wimhf_local_prism_tron.sbatch`, `scripts/sbatch/run_wimhf_exact_community_align_clip.sbatch`, `scripts/sbatch/run_wimhf_exact_prism_tron.sbatch`.
 
@@ -87,7 +88,9 @@ Exact reproduction results:
 - PRISM: `21/32` features kept, mean fidelity `0.376`, full-SAE val AUC `0.671`. This is close to the paper's `23` high-fidelity PRISM features and recovers themes including detailed neutral answers, avoiding AI disclaimers, substantive controversial-topic engagement, dispreference for "yes"-only answers, and off-topic/tangential content.
 - Approximate API cost for exact CommunityAlign + PRISM reproduction: `$40`.
 
-Do not use GPT-5-mini for every exploratory run by default. Use it for trusted baselines and final validation of selected conditional findings. For broad sweeps, first use cached exact global features plus cheap/statistical context analyses, and evaluate better open-weight annotators before scaling annotation-heavy workflows. The first local annotator tried, `Qwen/Qwen3-30B-A3B-Instruct-2507`, was acceptable for PRISM but weak for CommunityAlign fidelity retention (`13/32` kept vs. `31/32` with GPT-5-mini), so it should not be the default final judge without further calibration.
+Do not use GPT-5-mini for every exploratory run by default. Use it for trusted baselines and final validation of selected conditional findings. For broad sweeps, first use cached exact global features plus cheap/statistical context analyses, and evaluate better open-weight annotators before scaling annotation-heavy workflows. The first local annotator tried, `Qwen/Qwen3-30B-A3B-Instruct-2507`, was acceptable for PRISM but weak for CommunityAlign fidelity retention (`13/32` kept vs. `31/32` with GPT-5-mini), so it should not be the default final judge without further calibration. Next calibration target: `Qwen/Qwen3.5-27B` as the local annotator on 2x A6000.
+
+Model selection should live in the JSON configs. `scripts/run_wimhf.py` should not rewrite the configured interpreter, annotator, or abbreviator model. Current local configs set `annotator_model` to `Qwen/Qwen3.5-27B`; exact configs set `annotator_model` and `abbreviator_model` to `gpt-5-mini`. The runner takes one required config path with `--config`; sbatch files should pass the exact config path directly rather than using dataset/profile shortcuts.
 
 The nested WIMHF patch supports batched local-vLLM annotation and `WIMHF_VLLM_*` engine settings. Suggested local annotator environment for 2x A6000:
 
@@ -110,14 +113,13 @@ Likely relevant methods: interaction/covariate LASSO, demeaned/reweighted LASSO,
 
 1. Install WIMHF editable in `textdiff` with `--no-deps`. Human: Done. 
 2. Verify import/config load for CommunityAlign and PRISM configs. Codex: Done with `conda run -n textdiff`; both cached dataset paths exist.
-3. Create local-annotator config variants for CommunityAlign and PRISM using `Qwen/Qwen3-30B-A3B-Instruct-2507` as `annotator_model`.
-4. Optional smoke sanity check with `RUN_MODE=smoke`. [Human: remove this]
-5. Run full local-annotator WIMHF reproduction for CommunityAlign and PRISM. Codex: runner and sbatch wrapper written; not submitted. [Human: submitted]
-6. Compare feature tables, fidelity metrics, and predictive metrics. Codex: Done; PRISM matches reasonably, CommunityAlign needs GPT-5-mini verification.
-7. Run GPT-5-mini annotator reproduction for CommunityAlign and PRISM, prioritizing CommunityAlign. Human: Done; outputs in `outputs/reproduction/wimhf_exact`; use as trusted baseline.
-8. Build context inventories and support tables for CommunityAlign and PRISM.
-9. Calibrate a stronger open-weight/local annotator against the GPT-5-mini feature-retention and top-feature results before using local annotation for large conditional sweeps.
-10. Decide the first conditional extension dataset and method.
+3. Create local-annotator config variants for CommunityAlign and PRISM using `Qwen/Qwen3-30B-A3B-Instruct-2507` as `annotator_model`. Done; this model was calibrated and found weak on CommunityAlign.
+4. Run full local-annotator WIMHF reproduction for CommunityAlign and PRISM. Codex: runner and sbatch wrapper written; not submitted. [Human: submitted]
+5. Compare feature tables, fidelity metrics, and predictive metrics. Codex: Done; PRISM matches reasonably, CommunityAlign needs GPT-5-mini verification.
+6. Run GPT-5-mini annotator reproduction for CommunityAlign and PRISM, prioritizing CommunityAlign. Human: Done; outputs in `outputs/reproduction/wimhf_exact`; use as trusted baseline.
+7. Build context inventories and support tables for CommunityAlign and PRISM.
+8. Calibrate `Qwen/Qwen3.5-27B` as a stronger open-weight/local annotator against the GPT-5-mini feature-retention and top-feature results before using local annotation for large conditional sweeps. Codex: local/exact config profiles and 2x A6000 sbatch wrappers updated; not submitted.
+9. Decide the first conditional extension dataset and method.
 
 ## Open Questions
 

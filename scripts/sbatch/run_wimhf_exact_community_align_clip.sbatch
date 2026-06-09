@@ -24,9 +24,9 @@ if [[ -z "${OAI_WIMHF:-}" && -n "${OPENAI_API_KEY:-}" ]]; then
   export OAI_WIMHF="${OPENAI_API_KEY}"
 fi
 
-python scripts/run_wimhf.py community_align \
+python scripts/run_wimhf.py \
+  --config configs/community_align_wimhf_exact.json \
   --mode full \
-  --run-root "outputs/reproduction/wimhf_exact/wimhf_exact_full_community_align_gpt5mini_s42_clip_20260608_${SLURM_JOB_ID:-manual}" \
-  --annotator-model gpt-5-mini
+  --run-root "outputs/reproduction/wimhf_exact/wimhf_exact_full_community_align_gpt5mini_s42_clip_20260608_${SLURM_JOB_ID:-manual}"
 
 conda deactivate

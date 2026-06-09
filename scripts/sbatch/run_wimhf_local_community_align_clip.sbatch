@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=wimhf_local_full_community_align_s42_clip_20260607
+#SBATCH --job-name=wimhf_local_full_community_align_qwen35_27b_s42_clip_20260609
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:rtxa6000:2
 #SBATCH --time=2-00:00:00
@@ -7,7 +7,7 @@
 #SBATCH --mem=64GB
 #SBATCH --account=clip
 #SBATCH --partition=clip
-#SBATCH --output=outputs/reproduction/wimhf_local/wimhf_local_full_community_align_s42_clip_20260607_%j.log
+#SBATCH --output=outputs/reproduction/wimhf_local/wimhf_local_full_community_align_qwen35_27b_s42_clip_20260609_%j.log
 
 source /nfshomes/paiheng/.bashrc
 cd /fs/clip-projects/clip-k12/paiheng/conditional_pref
@@ -28,9 +28,9 @@ if [[ -z "${OAI_WIMHF:-}" && -n "${OPENAI_API_KEY:-}" ]]; then
   export OAI_WIMHF="${OPENAI_API_KEY}"
 fi
 
-python scripts/run_wimhf.py community_align \
+python scripts/run_wimhf.py \
+  --config configs/community_align_wimhf_local.json \
   --mode full \
-  --run-root "outputs/reproduction/wimhf_local/wimhf_local_full_community_align_s42_clip_20260607_${SLURM_JOB_ID:-manual}" \
-  --local-model Qwen/Qwen3-30B-A3B-Instruct-2507
+  --run-root "outputs/reproduction/wimhf_local/wimhf_local_full_community_align_qwen35_27b_s42_clip_20260609_${SLURM_JOB_ID:-manual}"
 
 conda deactivate

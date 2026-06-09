@@ -21,22 +21,15 @@ if str(WIMHF_REPO) not in sys.path:
 from wimhf.quickstart import load_config, run_wimhf_pipeline  # noqa: E402
 
 
-BASE_CONFIGS = {
-    "community_align": PROJECT_DIR / "configs/community_align_wimhf_local.json",
-    "prism": PROJECT_DIR / "configs/prism_wimhf_local.json",
-}
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run WIMHF on the project preference datasets."
     )
     parser.add_argument(
-        "datasets",
-        nargs="*",
-        choices=sorted(BASE_CONFIGS),
-        default=["community_align", "prism"],
-        help="Dataset keys to run. Defaults to both target datasets.",
+        "--config",
+        type=Path,
+        required=True,
+        help="WIMHF JSON config to run.",
     )
     parser.add_argument(
         "--mode",
@@ -49,27 +42,6 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=None,
         help="Directory for generated configs, logs, and results.",
-    )
-    parser.add_argument(
-        "--local-model",
-        default=os.environ.get(
-            "LOCAL_MODEL", "Qwen/Qwen3-30B-A3B-Instruct-2507"
-        ),
-        help="Local vLLM model used for annotation/scoring.",
-    )
-    parser.add_argument(
-        "--annotator-model",
-        default=os.environ.get("ANNOTATOR_MODEL"),
-        help=(
-            "Model used for annotation/scoring. Defaults to --local-model for "
-            "backward-compatible local reproduction runs."
-        ),
-    )
-    parser.add_argument(
-        "--local-interpreter",
-        action="store_true",
-        default=os.environ.get("LOCAL_INTERPRETER", "0") == "1",
-        help="Also use the local model for feature interpretation.",
     )
     parser.add_argument(
         "--smoke-rows",
@@ -89,18 +61,34 @@ def ensure_openai_key() -> None:
         )
 
 
-def dataset_tag(datasets: list[str]) -> str:
-    return "ca_prism" if datasets == ["community_align", "prism"] else "_".join(datasets)
+def dataset_slug(dataset_name: str) -> str:
+    known = {
+        "CommunityAlign": "community_align",
+        "HH-RLHF": "hh_rlhf",
+        "PRISM": "prism",
+    }
+    if dataset_name in known:
+        return known[dataset_name]
+    return "".join(ch.lower() if ch.isalnum() else "_" for ch in dataset_name).strip("_")
 
 
-def default_run_root(mode: str, datasets: list[str]) -> Path:
+def config_group(config_path: Path) -> str:
+    stem = config_path.stem
+    if stem.endswith("_local"):
+        return "wimhf_local"
+    if stem.endswith("_exact"):
+        return "wimhf_exact"
+    return "wimhf"
+
+
+def default_run_root(mode: str, config_path: Path) -> Path:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_name = f"wimhf_local_{mode}_{dataset_tag(datasets)}_s42_{timestamp}"
-    return PROJECT_DIR / "outputs" / "reproduction" / "wimhf_local" / run_name
+    run_name = f"{config_path.stem}_{mode}_s42_{timestamp}"
+    return PROJECT_DIR / "outputs" / "reproduction" / config_group(config_path) / run_name
 
 
-def read_base_config(dataset: str) -> dict[str, Any]:
-    with BASE_CONFIGS[dataset].open() as f:
+def read_base_config(config_path: Path) -> dict[str, Any]:
+    with config_path.open() as f:
         return json.load(f)
 
 
@@ -122,21 +110,14 @@ def write_smoke_sample(
 
 
 def make_run_config(
-    dataset: str,
+    config_path: Path,
     mode: str,
     run_root: Path,
-    local_model: str,
-    annotator_model: str,
-    local_interpreter: bool,
     smoke_rows: int,
-) -> Path:
-    cfg = read_base_config(dataset)
+) -> tuple[Path, str]:
+    cfg = read_base_config(config_path)
+    dataset = dataset_slug(cfg["dataset"]["name"])
 
-    if local_interpreter:
-        cfg["interpretation"]["interpreter_model"] = local_model
-        cfg["interpretation"]["completion_kwargs"] = {}
-    cfg["interpretation"]["annotator_model"] = annotator_model
-    cfg["interpretation"]["abbreviator_model"] = "gpt-5-mini"
     cfg["runtime"]["checkpoint_dir"] = str(run_root / dataset / "checkpoints")
     cfg["runtime"]["cache_dir"] = str(run_root / dataset / "cache")
     cfg["runtime"]["retrain_sae"] = True
@@ -173,7 +154,7 @@ def make_run_config(
     config_path = config_dir / f"{dataset}_{mode}.json"
     with config_path.open("w") as f:
         json.dump(cfg, f, indent=2)
-    return config_path
+    return config_path, dataset
 
 
 def write_wimhf_outputs(results: dict[str, Any], output_dir: Path) -> None:
@@ -194,27 +175,28 @@ def write_wimhf_outputs(results: dict[str, Any], output_dir: Path) -> None:
 
 
 def run_dataset(
-    dataset: str,
+    input_config_path: Path,
     mode: str,
     run_root: Path,
-    local_model: str,
-    annotator_model: str,
-    local_interpreter: bool,
     smoke_rows: int,
 ) -> None:
-    config_path = make_run_config(
-        dataset=dataset,
+    config_path, dataset = make_run_config(
+        config_path=input_config_path,
         mode=mode,
         run_root=run_root,
-        local_model=local_model,
-        annotator_model=annotator_model,
-        local_interpreter=local_interpreter,
         smoke_rows=smoke_rows,
     )
     output_dir = run_root / dataset / "results"
 
     print(f"Starting {dataset}: {config_path}", flush=True)
     cfg = load_config(str(config_path))
+    print(
+        "Effective models for "
+        f"{dataset}: interpreter={cfg.interpretation.interpreter_model}, "
+        f"annotator={cfg.interpretation.annotator_model}, "
+        f"abbreviator={cfg.interpretation.abbreviator_model}",
+        flush=True,
+    )
     results = run_wimhf_pipeline(cfg)
     write_wimhf_outputs(results, output_dir)
     print(f"Finished {dataset}: {output_dir}", flush=True)
@@ -223,30 +205,28 @@ def run_dataset(
 def main() -> None:
     args = parse_args()
     ensure_openai_key()
-    annotator_model = args.annotator_model or args.local_model
 
-    run_root = args.run_root or default_run_root(args.mode, args.datasets)
+    config_path = args.config
+    if not config_path.is_absolute():
+        config_path = PROJECT_DIR / config_path
+    if not config_path.exists():
+        raise FileNotFoundError(f"WIMHF config not found: {config_path}")
+
+    run_root = args.run_root or default_run_root(args.mode, config_path)
     run_root.mkdir(parents=True, exist_ok=True)
 
     print(f"Run root: {run_root}", flush=True)
     print(f"Mode: {args.mode}", flush=True)
-    print(f"Local model: {args.local_model}", flush=True)
-    print(f"Annotator model: {annotator_model}", flush=True)
-    print(f"Local interpreter: {int(args.local_interpreter)}", flush=True)
-    print(f"Datasets: {' '.join(args.datasets)}", flush=True)
+    print(f"Input config: {config_path}", flush=True)
 
-    for dataset in args.datasets:
-        run_dataset(
-            dataset=dataset,
-            mode=args.mode,
-            run_root=run_root,
-            local_model=args.local_model,
-            annotator_model=annotator_model,
-            local_interpreter=args.local_interpreter,
-            smoke_rows=args.smoke_rows,
-        )
+    run_dataset(
+        input_config_path=config_path,
+        mode=args.mode,
+        run_root=run_root,
+        smoke_rows=args.smoke_rows,
+    )
 
-    print(f"All requested WIMHF runs completed under {run_root}", flush=True)
+    print(f"WIMHF run completed under {run_root}", flush=True)
 
 
 if __name__ == "__main__":
