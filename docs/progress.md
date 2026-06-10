@@ -1,6 +1,6 @@
 # Conditional Preference Discovery Progress
 
-Last updated: 2026-06-09.
+Last updated: 2026-06-10.
 
 This file is the main standalone context file for continuing the project. Keep it concise and update it as decisions change. Put bulky inventories or detailed notes in separate docs and link them here.
 
@@ -82,6 +82,8 @@ Use `--no-deps` initially to avoid disturbing the working Torch/vLLM stack.
 
 Use `outputs/reproduction/wimhf_exact` as the trusted global WIMHF baseline for CommunityAlign and PRISM. This run uses the paper-style setup: `text-embedding-3-small`, SAE `M=32`, `K=4`, prefixes `[8, 32]`, `length_delta` control, `gpt-5` interpreter, and `gpt-5-mini` annotator/abbreviator.
 
+The WIMHF paper explicitly justifies the small SAE size. It argues that preference-pair response differences occupy a much smaller concept space than token-level LLM activation corpora, and that larger `M` produced more redundant, less interpretable features with little or no preference-prediction AUC gain. Appendix A reports an `M ∈ {16, 32, 64, 128}` sweep: the fraction of non-redundant high-fidelity features drops from `39.3%` at `M=32` to `29.2%` at `M=128`, while AUC does not improve. However, the paper also notes the tradeoff that larger `M` can yield more total usable features despite lower purity; for CommunityAlign, `M=32` gives `24` non-redundant features while `M=128` gives `72`. Therefore `M=32` is the faithful WIMHF-compatible baseline, not necessarily the final capacity for conditional discovery.
+
 Exact reproduction results:
 
 - CommunityAlign: `31/32` features kept, mean fidelity `0.545`, full-SAE val AUC `0.686`. This matches the paper's `31` high-fidelity CA features and recovers paper-like themes: concrete/task-specific answers, structured lists/templates, omission of sustainability/environment, and omission of community/social/ethical framing.
@@ -109,7 +111,17 @@ Use HypotheSAEs as a method reference, not as a direct dependency for first repr
 
 Do not copy the full HypotheSAEs selection module. If conditional selection is needed, copy or adapt only the chosen method with provenance and tests.
 
-Likely relevant methods: interaction/covariate LASSO, demeaned/reweighted LASSO, group LASSO, conditional separation score.
+First conditional extension should modify SAE feature selection, not the SAE objective or embedding text. This follows the prior `text_diff` project: train the SAE normally, interpret/score features normally, then condition the statistical selection step over SAE activations on a pre-specified context. For PRISM, the first context should be `conversation_type` (`values guided`, `controversy guided`, `unguided`) because it is pre-existing, non-response-derived, balanced enough, and preference-relevant.
+
+Preferred first method: `demeaned-reweighted-lasso` with `conversation_type` as the contextual stratum and `length_delta` retained as a nuisance control. This residualizes activations and labels against the context/control design, applies equal-stratum weighting, then uses the same fixed feature budgets as WIMHF. It is appropriate when the context is a nuisance or balancing factor and the within-stratum preference effect is expected to have consistent sign. Use interaction/covariate LASSO as a secondary diagnostic for sign reversals or strong context-specific moderation. Other possible methods: group LASSO and conditional separation score.
+
+Hyperparameter discipline for conditional selection:
+
+- Keep WIMHF's `M=32`, `K=4`, prefixes `[8, 32]` for the first contextual baseline.
+- Keep fixed selection budgets, initially `top_k=[5, 10]`, so global and contextual selectors are compared at equal feature count.
+- Choose L1 strength by binary search to hit the feature budget, not by validation AUC.
+- Use held-out and per-context AUC as diagnostics, not as the selection criterion.
+- After the `M=32` contextual baseline is working, run PRISM capacity sensitivity at `M=64` and `M=128`; increase capacity only if it yields more non-redundant, high-fidelity, context-relevant selected features.
 
 ## Next Execution Steps
 
@@ -121,15 +133,17 @@ Likely relevant methods: interaction/covariate LASSO, demeaned/reweighted LASSO,
 6. Run GPT-5-mini annotator reproduction for CommunityAlign and PRISM, prioritizing CommunityAlign. Human: Done; outputs in `outputs/reproduction/wimhf_exact`; use as trusted baseline.
 7. Build context inventories and support tables for CommunityAlign and PRISM.
 8. Calibrate `Qwen/Qwen3.5-27B` as a stronger open-weight/local annotator against the GPT-5-mini feature-retention and top-feature results before using local annotation for large conditional sweeps. Codex: Done for CommunityAlign and PRISM; Qwen3.5 is the better local default for feature retention, with GPT-5-mini reserved for final validation.
-9. Decide the first conditional extension dataset and method.
+9. Implement the first PRISM contextual selector: `conversation_type` + `demeaned-reweighted-lasso`, preserving WIMHF's `M=32` baseline and fixed `top_k` selection budgets.
+10. Compare global vs. contextual selected features on PRISM using held-out AUC, per-context AUC, selected-feature overlap, coefficient shifts, and qualitative feature novelty.
+11. If the `M=32` run shows meaningful contextual re-ranking but limited discovery capacity, run PRISM capacity sensitivity with `M=64` and `M=128`, interpreting only the union of global/context-selected neurons needed for comparison.
 
 ## Open Questions
 
-- Which conditional feature-selection approach should be tried first?
-- After local-annotator reproduction, should the next pass keep OpenAI embeddings for WIMHF comparability or switch to local/newer embedders for stronger predictive signal?
+- After the first PRISM contextual baseline, does `M=32` provide enough context-specific discovery capacity, or should PRISM move to `M=64`/`M=128`?
+- Should the next pass keep OpenAI embeddings for WIMHF comparability or switch to local/newer embedders for stronger predictive signal?
 - Which open-weight annotator best matches GPT-5-mini fidelity scoring on CommunityAlign and PRISM at materially lower cost?
 
 ## TODO
 
-- Try adding the pre-specified context to the embedding prompt before changing the SAE objective. This follows the WIMHF README discussion that instruction-aware prompt-response embeddings can capture more preference-relevant information than response-only embeddings; context can be included in that prompt while keeping the SAE reconstruction-trained and pushing conditionality into downstream selection/evaluation.
-- Clarify SAE conditioning options before implementation. Current view: prompt-response embeddings are the minimal fix; HypotheSAEs-style conditional selection is the closest match to prior `text_diff` work; conditional/gated SAE encoders are more principled but higher-risk. See `docs/sae_conditioning_options.md`.
+- Port or implement only the needed conditional selector, with provenance from `../text_diff/repos/HypotheSAEs/hypothesaes/select_neurons.py` and focused tests for residualization, equal-stratum weights, and fixed-budget alpha search.
+- Revisit prompt/context-conditioned embeddings or conditional/gated SAE encoders only after the selection-stage contextual baseline is established. See `docs/sae_conditioning_options.md`.
