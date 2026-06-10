@@ -90,7 +90,7 @@ Exact reproduction results:
 - PRISM: `21/32` features kept, mean fidelity `0.376`, full-SAE val AUC `0.671`. This is close to the paper's `23` high-fidelity PRISM features and recovers themes including detailed neutral answers, avoiding AI disclaimers, substantive controversial-topic engagement, dispreference for "yes"-only answers, and off-topic/tangential content.
 - Approximate API cost for exact CommunityAlign + PRISM reproduction: `$40`.
 
-Do not use GPT-5-mini for every exploratory run by default. Use it for trusted baselines and final validation of selected conditional findings. For broad sweeps, first use cached exact global features plus cheap/statistical context analyses, and evaluate better open-weight annotators before scaling annotation-heavy workflows.
+Do not use GPT-5-mini for every exploratory run by default. Use it for trusted baselines and final validation of selected conditional findings. For broad sweeps and capacity discussion, base comparisons on the Qwen3.5-27B PRISM reproduction after calibrating it against GPT-5-mini; reserve GPT-5-mini for validating selected claims.
 
 Local annotator calibration summary: `Qwen/Qwen3-30B-A3B-Instruct-2507` was close on some downstream AUCs but poor at reproducing high-fidelity feature retention (`13/32` kept on CommunityAlign and `8/32` on PRISM). `Qwen/Qwen3.5-27B` is much closer for feature-table reproduction (`31/32` kept on CommunityAlign and `22/32` on PRISM), though PRISM full-SAE val AUC remains below exact/paper (`0.665` vs. `0.671`). Detailed table and paper references: `docs/wimhf_local_calibration.md`.
 
@@ -122,6 +122,7 @@ Hyperparameter discipline for conditional selection:
 - Choose L1 strength by binary search to hit the feature budget, not by validation AUC.
 - Use held-out and per-context AUC as diagnostics, not as the selection criterion.
 - After the `M=32` contextual baseline is working, run PRISM capacity sensitivity at `M=64` and `M=128`; increase capacity only if it yields more non-redundant, high-fidelity, context-relevant selected features.
+- Keep `K=4` fixed for the first capacity sensitivity so the only intended capacity axis is `M`. Do not sweep `K` until the `M` sweep indicates either dead/redundant capacity or undercomplete feature discovery; if needed, treat `K` as a secondary SAE-quality sensitivity and evaluate reconstruction error, feature prevalence/dead-neuron rate, feature redundancy, fidelity retention, and stability of the global/contextual selected-feature union rather than selecting by validation AUC alone.
 
 ## Next Execution Steps
 
@@ -133,17 +134,17 @@ Hyperparameter discipline for conditional selection:
 6. Run GPT-5-mini annotator reproduction for CommunityAlign and PRISM, prioritizing CommunityAlign. Human: Done; outputs in `outputs/reproduction/wimhf_exact`; use as trusted baseline.
 7. Build context inventories and support tables for CommunityAlign and PRISM.
 8. Calibrate `Qwen/Qwen3.5-27B` as a stronger open-weight/local annotator against the GPT-5-mini feature-retention and top-feature results before using local annotation for large conditional sweeps. Codex: Done for CommunityAlign and PRISM; Qwen3.5 is the better local default for feature retention, with GPT-5-mini reserved for final validation.
-9. Implement the first PRISM contextual selector: `conversation_type` + `demeaned-reweighted-lasso`, preserving WIMHF's `M=32` baseline and fixed `top_k` selection budgets.
-10. Compare global vs. contextual selected features on PRISM using held-out AUC, per-context AUC, selected-feature overlap, coefficient shifts, and qualitative feature novelty.
+9. Implement the first PRISM covariate/contextual selector: `conversation_type` + `demeaned-reweighted-lasso`, preserving WIMHF's `M=32` baseline and fixed `top_k` selection budgets. Codex: Done; reusable selector lives in `repos/wimhf/wimhf/feature_selection.py`, PRISM runner is `scripts/run_prism_covariate_selector.py`, GPT-5-mini M32 outputs are in `outputs/analysis/prism_covariate_selector/wimhf_exact_full_prism_gpt5mini_s42_tron_20260608_6985771`, and Qwen3.5 M32/M64/M128 selector sbatch wrappers are written.
+10. Compare global vs. contextual selected features on PRISM using held-out AUC, per-context AUC, selected-feature overlap, coefficient shifts, and qualitative feature novelty. Codex: Done for exact PRISM M32; see `docs/prism_contextual_comparison.md`. Result: contextual selection mostly re-ranks global features, adds neuron `5` (long multi-point explanation/list), and is slightly worse than global on overall/per-context AUC.
 11. If the `M=32` run shows meaningful contextual re-ranking but limited discovery capacity, run PRISM capacity sensitivity with `M=64` and `M=128`, interpreting only the union of global/context-selected neurons needed for comparison.
 
 ## Open Questions
 
-- After the first PRISM contextual baseline, does `M=32` provide enough context-specific discovery capacity, or should PRISM move to `M=64`/`M=128`?
+- After the first PRISM contextual baseline, does `M=32` provide enough context-specific discovery capacity, or should PRISM move to `M=64`/`M=128`? Initial answer: run `M=64`/`M=128` capacity sensitivity, because `M=32` shows contextual re-ranking but limited novelty and no AUC gain.
 - Should the next pass keep OpenAI embeddings for WIMHF comparability or switch to local/newer embedders for stronger predictive signal?
 - Which open-weight annotator best matches GPT-5-mini fidelity scoring on CommunityAlign and PRISM at materially lower cost?
 
 ## TODO
 
-- Port or implement only the needed conditional selector, with provenance from `../text_diff/repos/HypotheSAEs/hypothesaes/select_neurons.py` and focused tests for residualization, equal-stratum weights, and fixed-budget alpha search.
+- Run PRISM Qwen3.5 M32/M64/M128 covariate selectors and decide whether the capacity runs add useful non-redundant context-relevant features beyond the M32 re-ranking result.
 - Revisit prompt/context-conditioned embeddings or conditional/gated SAE encoders only after the selection-stage contextual baseline is established. See `docs/sae_conditioning_options.md`.
