@@ -132,3 +132,4 @@ Likely relevant methods: interaction/covariate LASSO, demeaned/reweighted LASSO,
 ## TODO
 
 - Try adding the pre-specified context to the embedding prompt before changing the SAE objective. This follows the WIMHF README discussion that instruction-aware prompt-response embeddings can capture more preference-relevant information than response-only embeddings; context can be included in that prompt while keeping the SAE reconstruction-trained and pushing conditionality into downstream selection/evaluation.
+- Clarify SAE conditioning options before implementation. Current view: prompt-response embeddings are the minimal fix; HypotheSAEs-style conditional selection is the closest match to prior `text_diff` work; conditional/gated SAE encoders are more principled but higher-risk. See `docs/sae_conditioning_options.md`.
