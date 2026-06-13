@@ -55,6 +55,7 @@ Backup/secondary candidates:
 - CommunityAlign and PRISM WIMHF configs use `text-embedding-3-small`, SAE `M=32`, `K=4`, prefixes `[8, 32]`, and `length_delta` control.
 - `repos/wimhf` is a nested git repo; local WIMHF patches are tracked there, not by the outer project repo.
 - WIMHF runner: `scripts/run_wimhf.py`; Slurm wrappers following `docs/slurm.md`: `scripts/sbatch/run_wimhf_local_community_align_clip.sbatch`, `scripts/sbatch/run_wimhf_local_prism_tron.sbatch`, `scripts/sbatch/run_wimhf_exact_community_align_clip.sbatch`, `scripts/sbatch/run_wimhf_exact_prism_tron.sbatch`.
+- Feature-by-stratum table builder: `scripts/build_feature_stratum_tables.py`.
 
 ## Environment Decision
 
@@ -124,6 +125,23 @@ Hyperparameter discipline for conditional selection:
 - After the `M=32` contextual baseline is working, run PRISM capacity sensitivity at `M=64` and `M=128`; increase capacity only if it yields more non-redundant, high-fidelity, context-relevant selected features.
 - Keep `K=4` fixed for the first capacity sensitivity so the only intended capacity axis is `M`. Do not sweep `K` until the `M` sweep indicates either dead/redundant capacity or undercomplete feature discovery; if needed, treat `K` as a secondary SAE-quality sensitivity and evaluate reconstruction error, feature prevalence/dead-neuron rate, feature redundancy, fidelity retention, and stability of the global/contextual selected-feature union rather than selecting by validation AUC alone.
 
+## Contextual Breakdown Tables
+
+Feature-by-stratum prevalence and win-rate tables are now available for the trusted exact GPT-5-mini runs. The table metric `feature_win_rate` is response-side normalized: when a signed SAE feature appears on response A (`activation > 0`) or response B (`activation < 0`), it measures how often the labeled winner is the feature-bearing response. Tables also include stratum support, feature prevalence inside each stratum, Wilson CIs, positive/negative activation prevalence, and global feature metadata.
+
+Artifacts:
+
+- PRISM exact M32, validation split, kept neurons, `conversation_type` and `turn_bucket`: `outputs/analysis/feature_strata/wimhf_exact_full_prism_gpt5mini_s42_tron_20260608_6985771/feature_strata_val_kept.csv`.
+- PRISM support table: `outputs/analysis/feature_strata/wimhf_exact_full_prism_gpt5mini_s42_tron_20260608_6985771/strata_support_val_kept.csv`.
+- CommunityAlign exact M32, validation split, kept neurons, `annotator_country`, `annotator_political`, `is_pregenerated_first_prompt`, and `turn_bucket`: `outputs/analysis/feature_strata/wimhf_exact_full_community_align_gpt5mini_s42_clip_20260608_6985770/feature_strata_val_kept.csv`.
+- CommunityAlign support table: `outputs/analysis/feature_strata/wimhf_exact_full_community_align_gpt5mini_s42_clip_20260608_6985770/strata_support_val_kept.csv`.
+
+Initial read:
+
+- PRISM `conversation_type` is well supported but mostly shows global quality/format features, not strong context-specific novelty. `turn_bucket` is also well supported and more operationally meaningful; e.g. first-turn PRISM examples have much higher prevalence for detailed neutral explanations and long multi-point answers.
+- CommunityAlign is the stronger next target. `annotator_country`, `annotator_political`, `is_pregenerated_first_prompt`, and `turn_bucket` all have enough validation support for credible breakdowns. The largest effects are still global utility/format features such as structured bullet lists, templates, concrete task-specific answers, and omission of sustainability/community framing, but CommunityAlign gives a better substrate for testing true preference moderation than PRISM `conversation_type`.
+- These tables are descriptive diagnostics, not yet evidence of a conditional discovery win. The next statistical test should explicitly estimate feature-by-context interactions and sign/magnitude shifts.
+
 ## Next Execution Steps
 
 1. Install WIMHF editable in `condpref` with `--no-deps`. Human: Done. 
@@ -136,15 +154,21 @@ Hyperparameter discipline for conditional selection:
 8. Calibrate `Qwen/Qwen3.5-27B` as a stronger open-weight/local annotator against the GPT-5-mini feature-retention and top-feature results before using local annotation for large conditional sweeps. Codex: Done for CommunityAlign and PRISM; Qwen3.5 is the better local default for feature retention, with GPT-5-mini reserved for final validation.
 9. Implement the first PRISM covariate/contextual selector: `conversation_type` + `demeaned-reweighted-lasso`, preserving WIMHF's `M=32` baseline and fixed `top_k` selection budgets. Codex: Done; reusable selector lives in `repos/wimhf/wimhf/feature_selection.py`, PRISM runner is `scripts/run_prism_covariate_selector.py`, GPT-5-mini M32 outputs are in `outputs/analysis/prism_covariate_selector/wimhf_exact_full_prism_gpt5mini_s42_tron_20260608_6985771`, and Qwen3.5 M32/M64/M128 selector sbatch wrappers are written.
 10. Compare global vs. contextual selected features on PRISM using held-out AUC, per-context AUC, selected-feature overlap, coefficient shifts, and qualitative feature novelty. Codex: Done for exact PRISM M32; see `docs/prism_contextual_comparison.md`. Result: contextual selection mostly re-ranks global features, adds neuron `5` (long multi-point explanation/list), and is slightly worse than global on overall/per-context AUC.
-11. If the `M=32` run shows meaningful contextual re-ranking but limited discovery capacity, run PRISM capacity sensitivity with `M=64` and `M=128`, interpreting only the union of global/context-selected neurons needed for comparison.
+11. Run PRISM capacity sensitivity with `M=64` and `M=128`, interpreting only the union of global/context-selected neurons needed for comparison. Codex: Done; see `docs/prism_contextual_comparison.md`. Result: larger SAEs expose more retained interpretable neurons but do not make `conversation_type` + demeaned-reweighted LASSO beat global selection.
+12. Build feature-by-stratum prevalence/win-rate tables. Codex: Done for PRISM exact M32 over `conversation_type` and `turn_bucket`, and CommunityAlign exact M32 over `annotator_country`, `annotator_political`, `is_pregenerated_first_prompt`, and `turn_bucket`; see Contextual Breakdown Tables above.
+13. Move beyond PRISM `conversation_type`: prioritize CommunityAlign interaction/moderation analysis over `annotator_country`, `annotator_political`, `is_pregenerated_first_prompt`, and `turn_bucket`; keep PRISM `turn_bucket` as a secondary non-conversation-type diagnostic.
 
 ## Open Questions
 
-- After the first PRISM contextual baseline, does `M=32` provide enough context-specific discovery capacity, or should PRISM move to `M=64`/`M=128`? Initial answer: run `M=64`/`M=128` capacity sensitivity, because `M=32` shows contextual re-ranking but limited novelty and no AUC gain.
+- After the first PRISM contextual baseline, does `M=32` provide enough context-specific discovery capacity, or should PRISM move to `M=64`/`M=128`? Answer: capacity helps inventory size but not the core contextual claim for `conversation_type`; do not spend more effort on PRISM `conversation_type` unless interaction tests reveal sign/magnitude reversals.
+- Which CommunityAlign strata produce real feature-by-context moderation rather than merely different prevalence of global quality features?
+- What threshold should define an actionable contextual hypothesis: minimum stratum share, minimum feature prevalence, minimum feature-side win-rate shift, and whether the shift survives interaction modeling with length controls?
 - Should the next pass keep OpenAI embeddings for WIMHF comparability or switch to local/newer embedders for stronger predictive signal?
 - Which open-weight annotator best matches GPT-5-mini fidelity scoring on CommunityAlign and PRISM at materially lower cost?
 
 ## TODO
 
-- Run PRISM Qwen3.5 M32/M64/M128 covariate selectors and decide whether the capacity runs add useful non-redundant context-relevant features beyond the M32 re-ranking result.
+- Implement interaction/covariate LASSO or per-feature interaction logit for CommunityAlign contexts: `feature + context + feature:context + length_delta`, with selection focused on sign reversals and large context-specific coefficient shifts.
+- Add a compact ranking report over the feature-stratum tables: high support, high prevalence, large feature-win-rate shift, and disagreement with the global coefficient.
+- Validate the most promising CommunityAlign contextual hypotheses with held-out interaction AUC/per-stratum AUC and qualitative examples.
 - Revisit prompt/context-conditioned embeddings or conditional/gated SAE encoders only after the selection-stage contextual baseline is established. See `docs/sae_conditioning_options.md`.
